@@ -3,10 +3,9 @@ from sklearn.model_selection import train_test_split
 from pprint import pprint
 
 df = pd.read_csv('iris.csv')
-train, test = train_test_split(df, test_size=0.2, random_state=42, shuffle=True)
-
-y = train['class']
-x = train.drop(columns=['class'])
+x_full = df.drop(columns=["class"])
+y_full = df["class"]
+x, x_test, y, y_test = train_test_split(x_full, y_full, test_size=0.2, random_state=95, stratify=y_full)
 pd.set_option("display.max_rows", None, "display.max_columns", None)
 
 # {attribute : [split, in order]}
@@ -27,13 +26,14 @@ for i in x:
 
 # {attribute : {category_tup : { "final": (error, class), "count" : {setosa: 0, virginica: 0, other: 0} } } }
 category_accuracies = {}
-
+category_values = {}
 # count up class frequencies
 for i in x:
     count = 0
 
     if i not in category_accuracies:
         category_accuracies[i] = {}
+        category_values[i] = {}
 
     for value in x[i]:
         for category in categories[i]:
@@ -42,10 +42,12 @@ for i in x:
                     category_accuracies[i][category] = {}
                     category_accuracies[i][category]["final"] = None
                     category_accuracies[i][category]["count"] = {"Iris-setosa": 0, "Iris-versicolor": 0, "Iris-virginica": 0}
+                    category_values[i][category] = []
                 
                 category_accuracies[i][category]["count"][y.iloc[count]] += 1
+                category_values[i][category].append((value, y.iloc[count]))
         count += 1
-
+        
 # find the final class per category and error rate
 error_rates = []
 for i in x:
@@ -62,9 +64,6 @@ attribute_order = [i[1] for i in sorted(error_rates)]
 
 num_correct = 0
 total_num = 0
-
-test_y = test['class']
-test_x = test.drop(columns=['class'])
 
 # {predicted : {actual : {0, 0, 0}}}
 confusion_matrix = {
@@ -85,28 +84,40 @@ confusion_matrix = {
     }
 }
 
-for i in range(len(test_x)):
-    # print(test_x.iloc[i]["petalwidth"],)
-    best_attr_value = test_x.iloc[i][attribute_order[0]]
+for i in range(len(x_test)):
+    best_attr_value = x_test.iloc[i][attribute_order[0]]
 
-    if best_attr_value < categories[attribute_order[0]][0][0]:
-        idx = 0
-    elif best_attr_value > categories[attribute_order[0]][-1][1]:
-        idx = -1
+    min_cat = None
+    min_cat_idx = 0
+    max_cat = None
+    max_cat_idx = 0
+
+    for c in range(len(categories[attribute_order[0]])):
+        if min_cat is None or categories[attribute_order[0]][c][0] < min_cat[0]:
+            min_cat = categories[attribute_order[0]][c]
+            min_cat_idx = c
+
+        if max_cat is None or categories[attribute_order[0]][c][1] > max_cat[1]:
+            max_cat = categories[attribute_order[0]][c]
+            max_cat_idx = c
+
+    if best_attr_value < min_cat[0]:
+        idx = min_cat_idx
+    elif best_attr_value > max_cat[1]:
+        idx = max_cat_idx
     else:
         count1 = 0
 
         for category in categories[attribute_order[0]]:
             
             if category[0] <= best_attr_value <= category[1]:
-                # print(category)
-                # print(best_attr_value)
                 idx = count1
                 break
             count1 += 1
-
+            
     predicted = category_accuracies[attribute_order[0]][categories[attribute_order[0]][idx]]["final"][1]
-    actual = test_y.iloc[i]
+
+    actual = y_test.iloc[i]
 
     if predicted == actual:
         num_correct += 1
