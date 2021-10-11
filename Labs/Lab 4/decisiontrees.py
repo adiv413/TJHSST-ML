@@ -1,196 +1,262 @@
-import numpy as np
-import csv
+# Aditya Vasantharao, Pd. 6
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn import metrics
+from pprint import pprint
+import math
+import matplotlib.pyplot as plt
+df = pd.read_csv('iris.csv')
+x_full = df.drop(columns=["class"])
+y_full = df["class"]
+x_train_full, x_test, y_train, y_test = train_test_split(x_full, y_full, test_size=0.2, random_state=38, stratify=y_full)
+pd.set_option("display.max_rows", None, "display.max_columns", None)
+def get_entropy(count, total):
+    return (count / total) * math.log2(count / total)
 
-class DecisionTree:
+class_entropy = 0
+classes = {}
 
-	def __init__(self, training_data): 
-		self.training_data = training_data
-		self.decisionList = []
+for i in y_train:
+    if i not in classes:
+        classes[i] = 0
+    classes[i] += 1
+    
+for i in classes:
+    count = classes[i]
+    class_entropy += get_entropy(count, len(y_train))
 
-	def calculateImpurity(self, li):
-		count0 = 0
-		count1 = 0
+class_entropy *= -1
+curr_entropy = class_entropy
 
-		for i in li:
-			if i == 0:
-				count0 += 1
-			else:
-				count1 += 1
+def generate_tree(x_train, curr_entropy): 
+    categories = {}
 
-		return 1 - (((count0 / len(li)) ** 2) + ((count1 / len(li)) ** 2))
+    for i in x_train:
+        splits = pd.cut(x_train[i], 3)
 
-	def splitList(self, dataset, feature, threshold):
-		total = []
-		left = []
-		right = []
+        if i not in categories:
+            categories[i] = []
 
-		for i in dataset:
-			if i[feature] < threshold:
-				left.append(i)
-			else:
-				right.append(i)
+        for split in splits:
+            tup = (split.left, split.right)
 
-		total.append(left)	
-		total.append(right)
+            if tup not in categories[i]:
+                categories[i].append(tup)
+            
+    info_gains = []
+    count = 0
+    tree = {}
+    # {feature : {category : {entropy}}}
+    feature_value_entropies = {}
 
-		return total
+    # 1. get best feature (there's a better way to do this using selectors like df[df[col_name] == ___]) but I realized this too late 
+    # and I don't want to change my whole algorithm now)
 
-	def isPerfect(self, dataset):
-		x = True
-		y = dataset[0][len(dataset[0]) - 1]
-		for i in dataset:
-			if not (i[len(dataset[0]) - 1] == y):
-				x = False
-		return x
+    for feature in x_train:
+        # { feature_value : {class1, class2, class3} }
+        classes_per_feature_val = {}
+        feature_value_entropies[feature] = {}
 
-	def calculateIG(self, dataset):
+        # { feature_value : 0 }
+        feature_value_counts = {}
 
-		if not dataset[0] or not dataset[1]:
-			return 0
+        for cat in categories[feature]:
+            classes_per_feature_val[cat] = {}
+            feature_value_counts[cat] = 0
 
-		left = [i[len(dataset[0][0]) - 1] for i in dataset[0]]
-		right = [i[len(dataset[0][0]) - 1] for i in dataset[1]]
+        for row_idx in range(len(x_train[feature])):
+            row_class = y_train.iloc[row_idx] # gets class value for specified row
+            row_value = x_train[feature].iloc[row_idx]
+            feature_value = None
 
-		total = list(map(float, (' '.join(map(str, left)) + ' ' + ' '.join(map(str, right))).split(' ')))
+            # find the category that this row is in
+            for cat in categories[feature]:
+                if cat[0] <= row_value <= cat[1]:
+                    feature_value = cat
+                    break
 
-		return self.calculateImpurity(total) - len(left) / len(total) * self.calculateImpurity(left) - len(right) / len(total) * self.calculateImpurity(right)
+            feature_value_counts[feature_value] += 1
+            
+            if row_class not in classes_per_feature_val[feature_value]:
+                classes_per_feature_val[feature_value][row_class] = 0
+            
+            classes_per_feature_val[feature_value][row_class] += 1
 
+        feature_entropy = 0
 
-	def getBestSplit(self, dataset, depth):
-		ig = 0
-		bestFeature = -1
-		bestThreshold = -1
+        for feature_value in classes_per_feature_val:
+            # (number of feature values / total num of values in this feature) * entropy of feature value vector
+            feature_value_entropy = 0
+            
+            for feature_value_class in classes_per_feature_val[feature_value]:
+                num_class = classes_per_feature_val[feature_value][feature_value_class]
+                total_class = feature_value_counts[feature_value]
 
-		total = []
-		quartiles = [25, 50, 75]
+                feature_value_entropy += get_entropy(num_class, total_class)
 
-		for i in range(len(dataset[0]) - 1):
-			featureList = [x[i] for x in dataset]
-			thresholds = np.percentile(np.array(featureList), quartiles).tolist()
+                feature_value_entropies[feature][feature_value] = -feature_value_entropy
 
-			if thresholds[0] == thresholds[1] == thresholds[2] == -1:
-				continue
+            feature_value_entropy *= -1
+            feature_entropy += (feature_value_counts[feature_value] / len(x_train[feature])) * feature_value_entropy
+        
+        info_gains.append((curr_entropy - feature_entropy, feature))
 
-			for j in thresholds:
-				temp_total = self.splitList(dataset, i, j)
-				temp_ig = self.calculateIG(temp_total)
+    # best feature has highest info gain
+    best_feature = max(info_gains)[1]
+    tree = {best_feature : {}}
 
-				if temp_ig > ig: 
-					bestFeature = i
-					bestThreshold = j
-					total = temp_total
-					ig = temp_ig
-		
-		if len(total) == 0:
-			return
+    # 2. split on feature
 
-		left = [i[len(total[0][0]) - 1] for i in total[0]]
-		right = [i[len(total[0][0]) - 1] for i in total[1]]
+    best_feature_values = categories[best_feature]
 
-		temp = []
+    # find the number of each class for each feature value in the feature
+    classes_per_feature_val = {}
 
-		temp.append(bestFeature)
-		temp.append(bestThreshold)
-		temp.append(self.zero_or_one(right))
-		temp.append(ig)
-		temp.append((len(left) + len(right)) / 2)
+    # { feature_value : count }
+    feature_value_counts = {}
 
-		self.decisionList.append(temp) 
+    for cat in categories[best_feature]:
+        classes_per_feature_val[cat] = {}
+        feature_value_counts[cat] = 0
 
-		if not self.isPerfect(total[0]) and left != [] and depth < 4:
-			self.getBestSplit(total[0], depth + 1)
-		if not self.isPerfect(total[1]) and right != [] and depth < 4:
-			self.getBestSplit(total[1], depth + 1)
+    for row_idx in range(len(x_train[best_feature])):
+        row_class = y_train.iloc[row_idx] # gets class value for specified row
+        row_value = x_train[best_feature].iloc[row_idx]
+        feature_value = None
 
-	def zero_or_one(self, data):
-		total = 0
-		x = len(data)
-		for i in data:
-			if i == 1:
-				total += 1
-		y = total / x
-		if total > 0.5:
-			return 1
-		return 0
+        # find the category that this row is in
+        for cat in categories[best_feature]:
+            if cat[0] <= row_value <= cat[1]:
+                feature_value = cat
+                break
 
-	def sort_by_IG(self, dataset):
-  		
-		for i in range(len(dataset)): 
-		    x = i 
+        feature_value_counts[feature_value] += 1
+        
+        if row_class not in classes_per_feature_val[feature_value]:
+            classes_per_feature_val[feature_value][row_class] = 0
+        
+        classes_per_feature_val[feature_value][row_class] += 1
 
-		    for j in range(i + 1, len(dataset)): 
-		        if dataset[x][3] < dataset[j][3]: 
-		            x = j 
-		                   
-		    dataset[i], dataset[x] = dataset[x], dataset[i] 
+    for feature_value in best_feature_values:
+        new_dataset = pd.DataFrame(columns=x_train.columns)
+        for idx in range(len(x_train)):
+            obj = x_train.iloc[idx]
+            if feature_value[0] <= obj[best_feature] <= feature_value[1]:
+                new_dataset = new_dataset.append(obj, ignore_index=True)
 
-		temp = []
+        new_dataset = x_train[(x_train[best_feature] >= feature_value[0]) & (x_train[best_feature] <= feature_value[1])]
 
-		for i in dataset:
-			if i[3] > 0.01: #0.06 and i[4] > len(self.training_data) / 30 or i[3] > 0.04 and i[4] > len(self.training_data) / 8:
-				temp.append(i)
+        if feature_value not in feature_value_entropies[best_feature]:
+            continue # rare issue where one quantile does not get populated, so you can just throw it away
 
-		return temp
-
-
-
-	def fit(self, dataset):
-		yVals = []
-		self.decisionList = self.sort_by_IG(self.decisionList)
-		
-		yVals = []
-		found = False
-
-		
-		for i in dataset:
-			for j in self.decisionList:
-				if i[j[0]] > j[1]:
-					yVals.append(j[2]) 
-					found = True
-					break
-			if not found:
-				yVals.append(0)
-
-			found = False
-
-		return yVals
-
-	def getAccuracy(self, dataset, fittedData):
-		total = 0
-		x = len(dataset)
-
-		if x != len(fittedData):
-			return -1
-
-		for i in range(x):
-			if dataset[i][len(dataset[0]) - 1] == fittedData[i]:
-				total += 1
-		return total / x
-
-	def train(self):
-		self.getBestSplit(self.training_data, 0)
+        new_curr_entropy = feature_value_entropies[best_feature][feature_value]
+        
+        if len(x_train.columns) == 1:
+            tree[best_feature][feature_value] = list(classes_per_feature_val[feature_value].keys())[0]
+        elif len(classes_per_feature_val[feature_value]) == 1: # leaf node
+            tree[best_feature][feature_value] = list(classes_per_feature_val[feature_value].keys())[0]
+        else: # not a leaf node, split further
+            tree[best_feature][feature_value] = generate_tree(new_dataset, new_curr_entropy)
+    return tree
 
 
-f = open("iris.csv", "r")
-reader = csv.reader(f)
-class_encoder = {
-    "Iris-setosa" : 1,
-    "Iris-versicolor" : 2,
-    "Iris-virginica" : 3
+tree = generate_tree(x_train_full, class_entropy)
+
+num_correct = 0
+total_num = 0
+
+# {predicted : {actual : {0, 0, 0}}}
+confusion_matrix = {
+    "Iris-setosa": {
+        "Iris-setosa": 0, 
+        "Iris-versicolor": 0, 
+        "Iris-virginica": 0
+    }, 
+    "Iris-versicolor": {
+        "Iris-setosa": 0, 
+        "Iris-versicolor": 0, 
+        "Iris-virginica": 0
+    }, 
+    "Iris-virginica": {
+        "Iris-setosa": 0, 
+        "Iris-versicolor": 0, 
+        "Iris-virginica": 0
+    }
 }
-lists_from_csv = []
-count = 0
-for row in reader:
-    # skip the column names
-    if count == 0:
-        count += 1
-        continue
-    row = [int(float(i) * 100) if not i[0].isalpha() else class_encoder[i] for i in row]
-    lists_from_csv.append(row)
 
-dt = DecisionTree(lists_from_csv[:int(len(lists_from_csv) * .8)])
+for i in range(len(x_test)):
+    row = x_test.iloc[i]
+    # print(row)
+    actual = y_test.iloc[i]
+    root_key = list(tree.keys())[0] # guaranteed to only have one node in root
+    root = tree[root_key]
+    predicted = None
 
-dt.train()
-output = dt.fit([lists_from_csv[int(len(lists_from_csv) * .8):]])
-print(output)
-print(dt.getAccuracy(lists_from_csv[int(len(lists_from_csv) * .8):], output))
+    while True:
+        curr_val = row[root_key]
+        min_cat = min(root)
+        max_cat = max(root)
+        actual_cat = None
+
+        if curr_val <= min_cat[0]:
+            actual_cat = min_cat
+        elif curr_val >= max_cat[1]:
+            actual_cat = max_cat
+        else:
+            for category in root:
+                if category[0] <= curr_val <= category[1]:
+                    actual_cat = category
+                    break
+
+            if actual_cat is None:
+                actual_cat = category
+            
+        next_node = root[actual_cat]
+        if isinstance(next_node, str): # we've reached a leaf node in the tree
+            predicted = next_node
+            break
+        else:
+            root_key = list(next_node.keys())[0]
+            root = next_node[root_key]
+
+    if predicted == actual:
+        num_correct += 1
+
+    total_num += 1
+
+    confusion_matrix[predicted][actual] += 1
+
+print("Accuracy:", str(round(num_correct / total_num * 100)) + "%")
+print()
+print("Confusion matrix:")
+print("predicted\t\tactual")
+
+print("\t\tIris-setosa Iris-versicolor Iris-virginica")
+
+for i in confusion_matrix:
+    if i != "Iris-versicolor":
+        print(i, "\t", end="")
+    else:
+        print(i, end=" ")
+    for j in confusion_matrix[i]:
+        print(confusion_matrix[i][j], end="\t\t")
+    print()
+
+# {feature : {attribute : next feature to split : {...} OR output_class}}
+
+# Test using sklearn's DecisionTreeClassifier
+
+model = DecisionTreeClassifier()
+model.fit(x_train_full, y_train)
+predicted = model.predict(x_test)
+
+print("Accuracy", metrics.accuracy_score(y_test, predicted))
+sklearn_confusion_matrix = metrics.confusion_matrix(y_test, predicted)
+print(sklearn_confusion_matrix)
+
+disp = metrics.ConfusionMatrixDisplay(confusion_matrix=sklearn_confusion_matrix, display_labels=["Iris-setosa", "Iris-versicolor", "Iris-virginica"])
+
+disp = disp.plot()
+
+plt.show()
