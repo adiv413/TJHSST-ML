@@ -46,7 +46,10 @@ def generate_tree(x_train, curr_entropy):
             
     info_gains = []
     count = 0
+
+    # {feature : {attribute : next feature to split : {...} OR output_class}}
     tree = {}
+    
     # {feature : {category : {entropy}}}
     feature_value_entropies = {}
 
@@ -242,8 +245,6 @@ for i in confusion_matrix:
     for j in confusion_matrix[i]:
         print(confusion_matrix[i][j], end="\t\t")
     print()
-
-# {feature : {attribute : next feature to split : {...} OR output_class}}
 
 # Test using sklearn's DecisionTreeClassifier
 
