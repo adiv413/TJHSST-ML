@@ -1,7 +1,7 @@
 # Aditya Vasantharao, Pd. 6
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import MultinomialNB
 from sklearn import metrics
 from pprint import pprint
 import math
@@ -164,16 +164,15 @@ for i in confusion_matrix:
     print()
 
 
-# # test using sklearn
-# model = GaussianNB()
-# model.fit(x_train, y_train)
-# predicted = model.predict(x_test)
-# print("Accuracy", metrics.accuracy_score(y_test, predicted))
-# sklearn_confusion_matrix = metrics.confusion_matrix(y_test, predicted)
-# print(sklearn_confusion_matrix)
+# Test using sklearn's MultinomialNB
 
-# disp = metrics.ConfusionMatrixDisplay(confusion_matrix=sklearn_confusion_matrix, display_labels=["Iris-setosa", "Iris-versicolor", "Iris-virginica"])
+model = MultinomialNB()
+model.fit(x_train, y_train)
+predicted = model.predict(x_test)
+print("Accuracy", metrics.accuracy_score(y_test, predicted))
+sklearn_confusion_matrix = metrics.confusion_matrix(y_test, predicted)
 
-# disp = disp.plot()
+disp = metrics.ConfusionMatrixDisplay(confusion_matrix=sklearn_confusion_matrix, display_labels=["Iris-setosa", "Iris-versicolor", "Iris-virginica"])
+disp = disp.plot()
 
-# plt.show()
+plt.show()

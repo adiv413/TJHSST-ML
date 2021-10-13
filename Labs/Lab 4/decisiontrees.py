@@ -254,7 +254,6 @@ predicted = model.predict(x_test)
 
 print("Accuracy", metrics.accuracy_score(y_test, predicted))
 sklearn_confusion_matrix = metrics.confusion_matrix(y_test, predicted)
-print(sklearn_confusion_matrix)
 
 disp = metrics.ConfusionMatrixDisplay(confusion_matrix=sklearn_confusion_matrix, display_labels=["Iris-setosa", "Iris-versicolor", "Iris-virginica"])
 

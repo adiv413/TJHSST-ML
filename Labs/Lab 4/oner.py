@@ -2,7 +2,6 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from pprint import pprint
-
 df = pd.read_csv('iris.csv')
 x_full = df.drop(columns=["class"])
 y_full = df["class"]
